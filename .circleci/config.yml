@@ -96,6 +96,7 @@ workflows:
       - ghc-8.2.2
       - ghc-8.4.4
       - ghc-8.6.5
+      - ghc-8.8.1
       - ghc-stack
 
 jobs:
@@ -113,6 +114,11 @@ jobs:
     environment:
       <<: *env
       GHC: ghc-8.6.5
+    <<: *build_default
+  ghc-8.8.1:
+    environment:
+      <<: *env
+      GHC: ghc-8.8.1
     <<: *build_default
   ghc-stack:
     environment:
