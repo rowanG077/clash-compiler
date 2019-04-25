@@ -896,4 +896,4 @@ primCo ty = Prim "_CO_" (PrimInfo ty WorkNever)
 undefinedTm
   :: Type
   -> Term
-undefinedTm = TyApp (Prim "Clash.Transformation." (PrimInfo undefinedTy WorkNever))
+undefinedTm = TyApp (Prim "Clash.Transformations.undefined" (PrimInfo undefinedTy WorkConstant))
