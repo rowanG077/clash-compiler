@@ -31,21 +31,24 @@ genComponent :: HasCallStack
              -> NetlistMonad ([Bool],SrcSpan,HashMap Identifier Word,Component)
 
 mkExpr :: HasCallStack
-       => Bool
+       => Maybe Identifier
+       -> Bool
        -> Either Identifier Id
        -> Type
        -> Term
        -> NetlistMonad (Expr,[Declaration])
 
 mkDcApplication :: HasCallStack
-                => HWType
+                => Maybe Identifier
+                -> HWType
                 -> Either Identifier Id
                 -> DataCon
                 -> [Term]
                 -> NetlistMonad (Expr,[Declaration])
 
 mkProjection
-  :: Bool
+  :: Maybe Identifier
+  -> Bool
   -> Either Identifier Id
   -> Term
   -> Type
@@ -53,7 +56,8 @@ mkProjection
   -> NetlistMonad (Expr, [Declaration])
 
 mkSelection
-  :: Either Identifier Id
+  :: Maybe Identifier
+  -> Either Identifier Id
   -> Term
   -> Type
   -> [Alt]
@@ -67,6 +71,7 @@ mkDeclarations :: HasCallStack => Id -> Term -> NetlistMonad [Declaration]
 mkFunApp
   :: HasCallStack
   => Identifier -- ^ LHS of the let-binder
+  -> Maybe Identifier -- ^ Maybe component label
   -> Id -- ^ Name of the applied function
   -> [Term] -- ^ Function arguments
   -> [Declaration] -- ^ Tick declarations

@@ -17,11 +17,13 @@
 
 module Clash.Netlist.BlackBox where
 
+import           Control.Error                 (hush)
 import           Control.Exception             (throw)
 import           Control.Lens                  ((<<%=),(%=))
 import qualified Control.Lens                  as Lens
 import           Control.Monad                 (when)
 import           Control.Monad.IO.Class        (liftIO)
+import           Control.Monad.Trans.Except    (runExcept)
 import           Data.Char                     (ord)
 import           Data.Either                   (lefts, partitionEithers)
 import qualified Data.HashMap.Lazy             as HashMap
@@ -58,7 +60,8 @@ import           Clash.Core.Term               as C
 import           Clash.Core.Type               as C (Type (..), ConstTy (..),
                                                 splitFunTys)
 import           Clash.Core.TyCon              as C (tyConDataCons)
-import           Clash.Core.Util               (isFun, termType)
+import           Clash.Core.Util
+  (isFun, mkApps, mkTicks, termType, tySym)
 import           Clash.Core.Var                as V
   (Id, Var (..), mkLocalId, modifyVarName)
 import           Clash.Core.VarEnv
@@ -110,7 +113,7 @@ mkBlackBoxContext bbName resId args = do
     -- Make context inputs
     tcm             <- Lens.use tcCache
     let resNm = nameOcc (varName resId)
-    (imps,impDecls) <- unzip <$> mapM (mkArgument resNm) args
+    (imps,impDecls) <- unzip <$> mapM (mkArgument Nothing resNm) args
     (funs,funDecls) <- mapAccumLM (addFunction tcm) IntMap.empty (zip args [0..])
 
     -- Make context result
@@ -164,13 +167,15 @@ isLiteral e = case collectArgs e of
   _                -> False
 
 mkArgument
-  :: Identifier
+  :: Maybe Identifier
+  -- ^ Label
+  -> Identifier
   -- ^ LHS of the original let-binder
   -> Term
   -> NetlistMonad ( (Expr,HWType,Bool)
                   , [Declaration]
                   )
-mkArgument bndr e = do
+mkArgument labelM0 bndr e = do
     tcm   <- Lens.use tcCache
     let ty = termType tcm e
     iw    <- Lens.use intWidth
@@ -201,17 +206,29 @@ mkArgument bndr e = do
           return ((N.Literal (Just (Unsigned 64,64)) (N.NumLit i),hwTy,True),[])
         (C.Literal (NaturalLiteral n), [],_) ->
           return ((N.Literal (Just (Unsigned iw,iw)) (N.NumLit n),hwTy,True),[])
+        (Prim "Clash.NamedTypes.name" _,args,ticks)
+          | Right nm0 : Right _ : Left fun : args1 <- args
+          -> let labelM1 = maybe labelM0 (Just . TextS.pack)
+                                 (hush (runExcept (tySym tcm nm0)))
+                 fun1 = mkApps (mkTicks fun ticks) args1
+             in  mkArgument labelM1 bndr fun1
+          | otherwise
+          -> do
+             (_,sp) <- Lens.use curCompNm
+             let msg = $(curLoc) ++ "Unexpected Clash.NamedTypes.name:\n\n"
+                    ++ showPpr e
+             throw (ClashException sp msg Nothing)
         (Prim f _,args,ticks) -> do
           let tickDecls = ticksToDecls ticks
-          (e',d) <- mkPrimitive True False (Left bndr) f args ty tickDecls
+          (e',d) <- mkPrimitive labelM0 True False (Left bndr) f args ty tickDecls
           case e' of
             (Identifier _ _) -> return ((e',hwTy,False), d)
             _                -> return ((e',hwTy,isLiteral e), d)
         (Data dc, args,_) -> do
-          (exprN,dcDecls) <- mkDcApplication hwTy (Left bndr) dc (lefts args)
+          (exprN,dcDecls) <- mkDcApplication labelM0 hwTy (Left bndr) dc (lefts args)
           return ((exprN,hwTy,isLiteral e),dcDecls)
         (Case scrut ty' [alt],[],_) -> do
-          (projection,decls) <- mkProjection False (Left bndr) scrut ty' alt
+          (projection,decls) <- mkProjection labelM0 False (Left bndr) scrut ty' alt
           return ((projection,hwTy,False),decls)
         _ ->
           return ((Identifier (error ($(curLoc) ++ "Forced to evaluate unexpected function argument: " ++ eTyMsg)) Nothing
@@ -276,7 +293,9 @@ extractPrimWarnOrFail nm = do
 
 
 mkPrimitive
-  :: Bool
+  :: Maybe Identifier
+  -- ^ Label
+  -> Bool
   -- ^ Put BlackBox expression in parenthesis
   -> Bool
   -- ^ Treat BlackBox expression as declaration
@@ -291,7 +310,7 @@ mkPrimitive
   -> [Declaration]
   -- ^ Tick declarations
   -> NetlistMonad (Expr,[Declaration])
-mkPrimitive bbEParen bbEasD dst nm args ty tickDecls =
+mkPrimitive labelM bbEParen bbEasD dst nm args ty tickDecls =
   go =<< extractPrimWarnOrFail nm
   where
     go
@@ -373,12 +392,12 @@ mkPrimitive bbEParen bbEasD dst nm args ty tickDecls =
                   tcm <- Lens.use tcCache
                   let dcs = tyConDataCons (tcm `lookupUniqMap'` tcN)
                       dc  = dcs !! fromInteger i
-                  (exprN,dcDecls) <- mkDcApplication hwTy dst dc []
+                  (exprN,dcDecls) <- mkDcApplication labelM hwTy dst dc []
                   return (exprN,dcDecls)
                 [Right _, Left scrut] -> do
                   tcm     <- Lens.use tcCache
                   let scrutTy = termType tcm scrut
-                  (scrutExpr,scrutDecls) <- mkExpr False (Left "c$tte_rhs") scrutTy scrut
+                  (scrutExpr,scrutDecls) <- mkExpr labelM False (Left "c$tte_rhs") scrutTy scrut
                   case scrutExpr of
                     Identifier id_ Nothing -> return (DataTag hwTy (Left id_),scrutDecls)
                     _ -> do
@@ -396,7 +415,7 @@ mkPrimitive bbEParen bbEasD dst nm args ty tickDecls =
                 tcm      <- Lens.use tcCache
                 let scrutTy = termType tcm scrut
                 scrutHTy <- unsafeCoreTypeToHWTypeM' $(curLoc) scrutTy
-                (scrutExpr,scrutDecls) <- mkExpr False (Left "c$dtt_rhs") scrutTy scrut
+                (scrutExpr,scrutDecls) <- mkExpr labelM False (Left "c$dtt_rhs") scrutTy scrut
                 case scrutExpr of
                   Identifier id_ Nothing -> return (DataTag scrutHTy (Right id_),scrutDecls)
                   _ -> do
@@ -616,26 +635,41 @@ mkFunInput resId e = do
     Right (decl,wr) ->
       return ((Right decl,wr,[],[],[],bbCtx),dcls)
   where
-    goExpr app@(collectArgsTicks -> (C.Var fun,args@(_:_),ticks)) = do
-      let (tmArgs,tyArgs) = partitionEithers args
-      if null tyArgs
-        then do
-          let tickDecls = ticksToDecls ticks
-          appDecls <- mkFunApp "~RESULT" fun tmArgs tickDecls
-          nm <- mkUniqueIdentifier Basic "block"
-          return (Right ((nm,appDecls),Wire))
-        else do
-          (_,sp) <- Lens.use curCompNm
-          throw (ClashException sp ($(curLoc) ++ "Not in normal form: Var-application with Type arguments:\n\n" ++ showPpr app) Nothing)
-    goExpr e' = do
-      tcm <- Lens.use tcCache
-      let eType = termType tcm e'
-      (appExpr,appDecls) <- mkExpr False (Left "c$bb_res") eType e'
-      let assn = Assignment "~RESULT" appExpr
-      nm <- if null appDecls
-               then return ""
-               else mkUniqueIdentifier Basic "block"
-      return (Right ((nm,appDecls ++ [assn]),Wire))
+    goExpr labelM0 app@(collectArgsTicks -> (fun,args0,ticks))
+      | C.Prim "Clash.NamedTypes.name" _ <- fun
+      = do
+        tcm <- Lens.use tcCache
+        case args0 of
+          Right nm0 : Right _ : Left fun1 : args1 ->
+            let labelM1 = maybe labelM0 (Just . TextS.pack)
+                                (hush (runExcept (tySym tcm nm0)))
+                fun2 = mkApps (mkTicks fun1 ticks) args1
+            in  goExpr labelM1 fun2
+          _ -> do
+               (_,sp) <- Lens.use curCompNm
+               throw (ClashException sp ($(curLoc) ++ "Unexpected Clash.NamedTypes.name:\n\n" ++ showPpr app) Nothing)
+      | C.Var f <- fun
+      , (_:_) <- args0
+      , let (tmArgs,tyArgs) = partitionEithers args0
+      = if null tyArgs
+           then do
+             let tickDecls = ticksToDecls ticks
+             appDecls <- mkFunApp "~RESULT" labelM0 f tmArgs tickDecls
+             nm <- mkUniqueIdentifier Basic "block"
+             return (Right ((nm,appDecls),Wire))
+           else do
+             (_,sp) <- Lens.use curCompNm
+             throw (ClashException sp ($(curLoc) ++ "Not in normal form: Var-application with Type arguments:\n\n" ++ showPpr app) Nothing)
+      | otherwise
+      = do
+        tcm <- Lens.use tcCache
+        let eType = termType tcm app
+        (appExpr,appDecls) <- mkExpr labelM0 False (Left "c$bb_res") eType app
+        let assn = Assignment "~RESULT" appExpr
+        nm <- if null appDecls
+                 then return ""
+                 else mkUniqueIdentifier Basic "block"
+        return (Right ((nm,appDecls ++ [assn]),Wire))
 
     go is0 n (Lam id_ e') = do
       lvl <- Lens.use curBBlvl
@@ -652,7 +686,7 @@ mkFunInput resId e = do
       return (Right (("",[assn]),Wire))
 
     go _ _ (Case scrut ty [alt]) = do
-      (projection,decls) <- mkProjection False (Left "c$bb_res") scrut ty alt
+      (projection,decls) <- mkProjection Nothing False (Left "c$bb_res") scrut ty alt
       let assn = Assignment "~RESULT" projection
       nm <- if null decls
                then return ""
@@ -662,7 +696,7 @@ mkFunInput resId e = do
     go _ _ (Case scrut ty alts@(_:_:_)) = do
       -- TODO: check that it's okay to use `mkUnsafeSystemName`
       let resId'  = resId {varName = mkUnsafeSystemName "~RESULT" 0}
-      selectionDecls <- mkSelection (Right resId') scrut ty alts []
+      selectionDecls <- mkSelection Nothing (Right resId') scrut ty alts []
       nm <- mkUniqueIdentifier Basic "selection"
       tcm <- Lens.use tcCache
       let scrutTy = termType tcm scrut
@@ -695,12 +729,13 @@ mkFunInput resId e = do
 
     go is0 n (Tick _ e') = go is0 n e'
 
-    go _ _ e'@(App {}) = goExpr e'
-    go _ _ e'@(C.Data {}) = goExpr e'
-    go _ _ e'@(C.Literal {}) = goExpr e'
-    go _ _ e'@(Cast {}) = goExpr e'
-    go _ _ e'@(Prim {}) = goExpr e'
-    go _ _ e'@(TyApp {}) = goExpr e'
+    go _ _ e'@(App {}) = goExpr Nothing e'
+    go _ _ e'@(C.Data {}) = goExpr Nothing e'
+    go _ _ e'@(C.Literal {}) = goExpr Nothing e'
+    go _ _ e'@(Cast {}) = goExpr Nothing e'
+    go _ _ e'@(Prim {}) = goExpr Nothing e'
+    go _ _ e'@(TyApp {}) = goExpr Nothing e'
+
 
     go _ _ e'@(Case _ _ []) =
       error $ $(curLoc) ++ "Cannot make function input for case without alternatives: " ++ show e'
