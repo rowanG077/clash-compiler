@@ -60,7 +60,6 @@ data ClashOpts = ClashOpts { opt_inlineLimit :: Int
                            , opt_color       :: OverridingBool
                            , opt_intWidth    :: Int
                            , opt_hdlDir      :: Maybe String
-                           , opt_tmpDir      :: String
                            -- ^ Directory to store temporary files in. Will be
                            -- cleaned after Clash has finished executing.
                            , opt_hdlSyn      :: HdlSyn
@@ -91,10 +90,8 @@ data ClashOpts = ClashOpts { opt_inlineLimit :: Int
 
 
 defClashOpts
-  :: FilePath
-  -- ^ Temporary directory
-  -> ClashOpts
-defClashOpts tmpDir
+  :: ClashOpts
+defClashOpts
   = ClashOpts
   { opt_dbgLevel            = DebugNone
   , opt_inlineLimit         = 20
@@ -107,7 +104,6 @@ defClashOpts tmpDir
   , opt_color               = Auto
   , opt_intWidth            = WORD_SIZE_IN_BITS
   , opt_hdlDir              = Nothing
-  , opt_tmpDir              = tmpDir
   , opt_hdlSyn              = Other
   , opt_errorExtra          = False
   , opt_floatSupport        = False

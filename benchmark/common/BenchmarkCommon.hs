@@ -38,18 +38,16 @@ defaultTests =
 typeTrans :: (CustomReprs -> TyConMap -> Type -> Maybe (Either String FilteredHWType))
 typeTrans = ghcTypeToHWType WORD_SIZE_IN_BITS True
 
-opts :: FilePath -> [FilePath] -> ClashOpts
-opts tmpDir idirs =
+opts :: [FilePath] -> ClashOpts
+opts idirs =
   ClashOpts 20 20 15 0 DebugNone False True True Auto WORD_SIZE_IN_BITS Nothing
-    tmpDir HDLSYN True True idirs Nothing True True False Nothing
+    HDLSYN True True idirs Nothing True True False Nothing
 
 backend :: VHDLState
 backend = initBackend WORD_SIZE_IN_BITS HDLSYN True Nothing
 
 runInputStage
-  :: FilePath
-  -- ^ Temporary directory
-  -> [FilePath]
+  :: [FilePath]
   -- ^ Import dirs
   -> FilePath
   -> IO (BindingMap
@@ -61,9 +59,9 @@ runInputStage
         ,[Id]
         ,Id
         )
-runInputStage tmpDir idirs src = do
+runInputStage idirs src = do
   pds <- primDirs backend
-  (bindingsMap,tcm,tupTcm,topEntities,primMap,reprs) <- generateBindings tmpDir Auto pds idirs (hdlKind backend) src Nothing
+  (bindingsMap,tcm,tupTcm,topEntities,primMap,reprs) <- generateBindings Auto pds idirs (hdlKind backend) src Nothing
   let topEntityNames = map (\(x,_,_) -> x) topEntities
       ((topEntity,_,_):_) = topEntities
       tm = topEntity
@@ -72,8 +70,7 @@ runInputStage tmpDir idirs src = do
   return (bindingsMap,tcm,tupTcm,topEntities, primMap2, buildCustomReprs reprs, topEntityNames,tm)
 
 runNormalisationStage
-  :: FilePath
-  -> [FilePath]
+  :: [FilePath]
   -> String
   -> IO (BindingMap
         ,[(Id, Maybe TopEntity, Maybe Id)]
@@ -82,11 +79,11 @@ runNormalisationStage
         ,CustomReprs
         ,Id
         )
-runNormalisationStage tmpDir idirs src = do
+runNormalisationStage idirs src = do
   supplyN <- Supply.newSupply
   (bindingsMap,tcm,tupTcm,topEntities,primMap,reprs,topEntityNames,topEntity) <-
-    runInputStage tmpDir idirs src
-  let opts1 = opts tmpDir idirs
+    runInputStage idirs src
+  let opts1 = opts idirs
       transformedBindings =
         normalizeEntity reprs bindingsMap primMap tcm tupTcm typeTrans reduceConstant
           topEntityNames opts1 supplyN topEntity

@@ -63,9 +63,7 @@ import           Clash.Unique
 import           Clash.Util              ((***),first,traceIf)
 
 generateBindings
-  :: FilePath
-  -- ^ Temporary directory
-  -> GHC.OverridingBool
+  :: GHC.OverridingBool
   -- ^ Use color
   -> [FilePath]
   -- ^ primitives (blackbox) directories
@@ -85,16 +83,16 @@ generateBindings
         , ResolvedPrimMap  -- The primitives found in '.' and 'primDir'
         , [DataRepr']
         )
-generateBindings tmpDir useColor primDirs importDirs hdl modName dflagsM = do
+generateBindings useColor primDirs importDirs hdl modName dflagsM = do
   (  bindings
    , clsOps
    , unlocatable
    , fiEnvs
    , topEntities
-   , pFP
+   , unresolvedPrims
    , customBitRepresentations
-   , primGuards ) <- loadModules tmpDir useColor hdl modName dflagsM importDirs
-  primMap <- generatePrimMap primGuards (concat [pFP, primDirs, importDirs])
+   , primGuards ) <- loadModules useColor hdl modName dflagsM importDirs
+  primMap <- generatePrimMap unresolvedPrims primGuards (concat [primDirs, importDirs])
   let ((bindingsMap,clsVMap),tcMap) = State.runState (mkBindings primMap bindings clsOps unlocatable) emptyGHC2CoreState
       (tcMap',tupTcCache)           = mkTupTyCons tcMap
       tcCache                       = makeAllTyCons tcMap' fiEnvs

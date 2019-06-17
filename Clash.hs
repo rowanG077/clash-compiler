@@ -18,10 +18,8 @@ import Clash.Annotations.BitRepresentation.Internal (buildCustomReprs)
 import Clash.Util
 
 import Control.DeepSeq
-import Control.Exception (finally)
 import qualified Data.Time.Clock as Clock
 import qualified Data.HashMap.Strict as HM
-import System.Directory (removeDirectoryRecursive)
 
 import GHC.Stack (HasCallStack)
 import Util (OverridingBool(..))
@@ -48,33 +46,26 @@ doHDL
   -> String
   -> IO ()
 doHDL b src = do
-  tmpDir <- createTemporaryClashDirectory
+  startTime <- Clock.getCurrentTime
+  pd      <- primDirs b
+  (bindingsMap,tcm,tupTcm,topEntities,primMap,reprs) <- generateBindings Auto pd ["."] (hdlKind b) src Nothing
+  prepTime <- startTime `deepseq` bindingsMap `deepseq` tcm `deepseq` reprs `deepseq` Clock.getCurrentTime
+  let prepStartDiff = reportTimeDiff prepTime startTime
+  putStrLn $ "Loading dependencies took " ++ prepStartDiff
 
-  finally (do
-    startTime <- Clock.getCurrentTime
-    pd      <- primDirs b
-    (bindingsMap,tcm,tupTcm,topEntities,primMap,reprs) <- generateBindings tmpDir Auto pd ["."] (hdlKind b) src Nothing
-    prepTime <- startTime `deepseq` bindingsMap `deepseq` tcm `deepseq` reprs `deepseq` Clock.getCurrentTime
-    let prepStartDiff = reportTimeDiff prepTime startTime
-    putStrLn $ "Loading dependencies took " ++ prepStartDiff
+  -- Parse primitives:
+  startTime' <- Clock.getCurrentTime
+  topDir     <- ghcLibDir
+  primMap2   <- sequence $ HM.map (sequence . fmap (compilePrimitive ["."] [] topDir)) primMap
+  prepTime'  <- startTime `deepseq` primMap2 `seq` Clock.getCurrentTime
+  let prepStartDiff' = reportTimeDiff prepTime' startTime'
+  putStrLn $ "Parsing primitives took " ++ prepStartDiff'
 
-    -- Parse primitives:
-    startTime' <- Clock.getCurrentTime
-    topDir     <- ghcLibDir
-    primMap2   <- sequence $ HM.map (sequence . fmap (compilePrimitive ["."] [] topDir)) primMap
-    prepTime'  <- startTime `deepseq` primMap2 `seq` Clock.getCurrentTime
-    let prepStartDiff' = reportTimeDiff prepTime' startTime'
-    putStrLn $ "Parsing primitives took " ++ prepStartDiff'
-
-    generateHDL (buildCustomReprs reprs) bindingsMap (Just b) primMap2 tcm tupTcm
-      (ghcTypeToHWType WORD_SIZE_IN_BITS True) reduceConstant topEntities
-      (ClashOpts 20 20 15 0 DebugNone False True True Auto WORD_SIZE_IN_BITS
-        Nothing tmpDir HDLSYN True True ["."] Nothing True True False Nothing)
-      (startTime,prepTime)
-   ) (do
-    removeDirectoryRecursive tmpDir
-   )
-
+  generateHDL (buildCustomReprs reprs) bindingsMap (Just b) primMap2 tcm tupTcm
+    (ghcTypeToHWType WORD_SIZE_IN_BITS True) reduceConstant topEntities
+    (ClashOpts 20 20 15 0 DebugNone False True True Auto WORD_SIZE_IN_BITS
+      Nothing HDLSYN True True ["."] Nothing True True False Nothing)
+    (startTime,prepTime)
 
 main :: IO ()
 main = genVHDL "./examples/FIR.hs"

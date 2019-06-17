@@ -51,7 +51,7 @@ myAddTemplate bbCtx = do
 
 {-# ANN myAdd
   (InlinePrimitive VHDL [I.i|
-  [ { "BlackBox" :
+  { "BlackBox" :
        { "name" : "Parameters.myAdd"
        , "templateFunction" : "Parameters.myAddTF"
        , "kind": "Declaration"
@@ -76,12 +76,12 @@ end;
 architecture structural of my_add is
 begin
   result <= x + y;
-end;" }] } } ] |] )
+end;" }] } } |] )
  #-}
 
 {-# ANN myAdd
   (InlinePrimitive Verilog [I.i|
-  [ { "BlackBox" :
+  { "BlackBox" :
       { "name" : "Parameters.myAdd"
       , "templateFunction" : "Parameters.myAddTF"
        , "kind": "Declaration"
@@ -99,12 +99,12 @@ end;" }] } } ] |] )
   parameter size;
 
   assign result = x + y;
-endmodule"       }] } } ] |] )
+endmodule"       }] } } |] )
  #-}
 
 {-# ANN myAdd
   (InlinePrimitive SystemVerilog [I.i|
-  [ { "BlackBox" :
+  { "BlackBox" :
       { "name" : "Parameters.myAdd"
       , "templateFunction" : "Parameters.myAddTF"
        , "kind": "Declaration"
@@ -122,7 +122,7 @@ endmodule"       }] } } ] |] )
   parameter size;
 
   assign result = x + y;
-endmodule"       }] } } ] |] )
+endmodule"       }] } } |] )
  #-}
 
 myAdd

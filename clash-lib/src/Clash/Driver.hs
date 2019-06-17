@@ -18,7 +18,7 @@ import qualified Control.Concurrent.Supply        as Supply
 import           Control.DeepSeq
 import           Control.Exception                (tryJust, bracket)
 import           Control.Lens                     (view, (^.), _4)
-import           Control.Monad                    (guard, when, unless, foldM)
+import           Control.Monad                    (guard, when, unless)
 import           Control.Monad.Catch              (MonadMask)
 import           Control.Monad.IO.Class           (MonadIO)
 import           Control.Monad.State              (evalState, get)
@@ -48,7 +48,7 @@ import qualified System.FilePath                  as FilePath
 import qualified System.IO                        as IO
 import           System.IO.Error                  (isDoesNotExistError)
 import           System.IO.Temp
-  (getCanonicalTemporaryDirectory, withTempDirectory, createTempDirectory)
+  (getCanonicalTemporaryDirectory, withTempDirectory)
 import qualified Text.PrettyPrint.ANSI.Leijen     as ANSI
 import           Text.Trifecta.Result
   (Result(Success, Failure), _errDoc)
@@ -74,7 +74,7 @@ import           Clash.Driver.Types
 import           Clash.Netlist                    (genNetlist)
 import           Clash.Netlist.Util               (genComponentName, genTopComponentName)
 import           Clash.Netlist.BlackBox.Parser    (runParse)
-import           Clash.Netlist.BlackBox.Types     (BlackBoxTemplate, BlackBoxFunction)
+import           Clash.Netlist.BlackBox.Types     (BlackBoxTemplate)
 import           Clash.Netlist.Types
   (BlackBox (..), Component (..), Identifier, FilteredHWType)
 import           Clash.Normalize                  (checkNonRecursive, cleanupGraph,
@@ -88,12 +88,6 @@ import           Clash.Util                       (first, reportTimeDiff)
 -- | Get modification data of current clash binary.
 getClashModificationDate :: IO Clock.UTCTime
 getClashModificationDate = Directory.getModificationTime =<< getExecutablePath
-
--- | Creates a directory for all Clash's temporary files
-createTemporaryClashDirectory :: IO FilePath
-createTemporaryClashDirectory = do
-  tmp <- getCanonicalTemporaryDirectory
-  createTempDirectory tmp "clash"
 
 -- | Create a set of target HDL files for a set of functions
 generateHDL
@@ -362,45 +356,18 @@ compilePrimitive
   -> ResolvedPrimitive
   -- ^ Primitive to compile
   -> IO CompiledPrimitive
-compilePrimitive idirs pkgDbs topDir (BlackBoxHaskell bbName wf bbGenName source) = do
+compilePrimitive idirs pkgDbs topDir (BlackBoxHaskell bbName wf bbGenName ()) = do
   let interpreterArgs = concatMap (("-package-db":) . (:[])) pkgDbs
   -- Compile a blackbox template function or fetch it from an already compiled file.
-  r <- go interpreterArgs source
+  r <- loadImportAndInterpret idirs interpreterArgs topDir qualMod funcName "BlackBoxFunction"
   processHintError
     (show bbGenName)
     bbName
-    (\bbFunc -> BlackBoxHaskell bbName wf bbGenName (hash source, bbFunc))
+    (\bbFunc -> BlackBoxHaskell bbName wf bbGenName (hash (), bbFunc))
     r
   where
     qualMod = intercalate "." modNames
     BlackBoxFunctionName modNames funcName = bbGenName
-
-    -- | Create directory based on base name and directory. Return path
-    -- of directory just created.
-    createDirectory'
-      :: FilePath
-      -> FilePath
-      -> IO FilePath
-    createDirectory' base sub =
-      let new = base </> sub in
-      Directory.createDirectory new >> return new
-
-    go
-      :: [String]
-      -> Maybe Text
-      -> IO (Either Hint.InterpreterError BlackBoxFunction)
-    go args (Just source') = do
-      -- Create a temporary directory with user module in it, add it to the
-      -- list of import direcotries, and run as if it were a "normal" compiled
-      -- module.
-      tmpDir0 <- getCanonicalTemporaryDirectory
-      withTempDirectory tmpDir0 "clash-prim-compile" $ \tmpDir1 -> do
-        modDir <- foldM createDirectory' tmpDir1 (init modNames)
-        Text.writeFile (modDir </> (last modNames ++ ".hs")) source'
-        loadImportAndInterpret (tmpDir1:idirs) args topDir qualMod funcName "BlackBoxFunction"
-
-    go args Nothing = do
-      loadImportAndInterpret idirs args topDir qualMod funcName "BlackBoxFunction"
 
 compilePrimitive idirs pkgDbs topDir (BlackBox pNm wf tkind () oReg libM imps incs templ) = do
   libM'  <- mapM parseTempl libM

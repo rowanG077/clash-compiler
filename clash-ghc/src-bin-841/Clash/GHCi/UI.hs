@@ -1942,7 +1942,6 @@ makeHDL backend optsRef srcs = do
                   fp     = opt_floatSupport opts1
                   syn    = opt_hdlSyn opts1
                   color  = opt_color opts1
-                  tmpDir = opt_tmpDir opts1
                   esc    = opt_escapedIds opts1
                   frcUdf = opt_forceUndefined opts1
                   hdl    = Clash.Backend.hdlKind backend'
@@ -1964,7 +1963,7 @@ makeHDL backend optsRef srcs = do
               forM_ srcs $ \src -> do
                 -- Generate bindings:
                 (bindingsMap,tcm,tupTcm,topEntities,primMap,reprs) <-
-                  generateBindings tmpDir color primDirs idirs hdl src (Just dflags)
+                  generateBindings color primDirs idirs hdl src (Just dflags)
                 prepTime <- startTime `deepseq` bindingsMap `deepseq` tcm `deepseq` Clock.getCurrentTime
                 let prepStartDiff = reportTimeDiff prepTime startTime
                 putStrLn $ "GHC+Clash: Loading modules cumulatively took " ++ prepStartDiff

@@ -55,11 +55,11 @@ import           GHC.Generics                 (Generic)
 import           GHC.Stack                    (HasCallStack)
 
 -- | An unresolved primitive still contains pointers to files.
-type UnresolvedPrimitive = Primitive Text ((TemplateFormat,BlackBoxFunctionName),Maybe TemplateSource) (Maybe S.Text) (Maybe TemplateSource)
+type UnresolvedPrimitive = Primitive Text ((TemplateFormat,BlackBoxFunctionName),Maybe TemplateSource) (Maybe S.Text) ()
 
 -- | A parsed primitive does not contain pointers to filesystem files anymore,
 -- but holds uncompiled @BlackBoxTemplate@s and @BlackBoxFunction@s.
-type ResolvedPrimitive        = Primitive Text ((TemplateFormat,BlackBoxFunctionName),Maybe Text) () (Maybe Text)
+type ResolvedPrimitive        = Primitive Text ((TemplateFormat,BlackBoxFunctionName),Maybe Text) () ()
 type GuardedResolvedPrimitive = PrimitiveGuard ResolvedPrimitive
 type ResolvedPrimMap          = PrimMap GuardedResolvedPrimitive
 
@@ -125,7 +125,7 @@ data TemplateSource
   -- ^ Template source stored in file on filesystem
   | TInline Text
   -- ^ Template stored inline
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic, NFData)
 
 
 data TemplateFormat
@@ -171,7 +171,8 @@ data Primitive a b c d
     -- ^ Whether the primitive does any work, i.e. takes chip area
   , functionName :: BlackBoxFunctionName
   , function :: d
-    -- ^ Used to indicate type of template (declaration or expression).
+  -- ^ Holds blackbox function and its hash, (Int, BlackBoxFunction), in a
+  -- CompiledPrimitive.
   }
   -- | A primitive that carries additional information. These are "real"
   -- primitives, hardcoded in the compiler. For example: 'mapSignal' in
@@ -195,13 +196,8 @@ instance FromJSON UnresolvedPrimitive where
             name' <- conVal .: "name"
             wf    <- ((conVal .:? "workInfo" >>= maybe (pure Nothing) parseWorkInfo) .!= WorkVariable)
             fName <- conVal .: "templateFunction"
-            templ <- (Just . TInline <$> conVal .: "template")
-                 <|> (Just . TFile   <$> conVal .: "file")
-                 <|> (pure Nothing)
-
             fName' <- either fail return (parseBBFN fName)
-
-            return (BlackBoxHaskell name' wf fName' templ)
+            return (BlackBoxHaskell name' wf fName' ())
           "BlackBox"  ->
             BlackBox <$> conVal .: "name"
                      <*> (conVal .:? "workInfo" >>= maybe (pure Nothing) parseWorkInfo) .!= WorkVariable
