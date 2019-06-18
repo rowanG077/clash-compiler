@@ -49,6 +49,11 @@ optional-packages: clash-cosim/clash-cosim.cabal
 
 source-repository-package
   type: git
+  location: https://github.com/simonmar/ghc-paths.git
+  tag: 3c867c34b6f505a500cc63bba5161b97aa0a9177
+
+source-repository-package
+  type: git
   location: https://github.com/ekmett/lens.git
   tag: 18877aefbd038a9192d996e66c642e298d06b138
 
@@ -56,11 +61,6 @@ source-repository-package
   type: git
   location: https://github.com/sol/doctest.git
   tag: 1c2e8f5b3285aa4c491a5fe22c7b94d8fcc84a14
-
-source-repository-package
-  type: git
-  location: https://github.com/Danielg/cabal-doctest.git
-  tag: 2c5f2ff85ac23ec130185aa1a25015e04d96533a
 
 -- Build documentation for all dependencies so we can upload docs to hackage
 -- with proper links
