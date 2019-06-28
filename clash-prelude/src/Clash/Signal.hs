@@ -206,6 +206,7 @@ module Clash.Signal
   , sampleReset
   , sampleResetN
   , fromList
+  , fromListReset
     -- ** lazy versions
   , sample_lazy
   , sampleN_lazy
