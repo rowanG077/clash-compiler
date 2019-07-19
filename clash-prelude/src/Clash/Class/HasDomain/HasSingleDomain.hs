@@ -65,7 +65,7 @@ type Outro =
    :$$$: ""
 
 type NotFoundError (t :: Type) =
-       "Could not find a domain in the following type:"
+       "Could not find a non-ambiguous domain in the following type:"
   :$$$: ""
   :$$$: "  " :<<>>: t
   :$$$: ""
@@ -82,13 +82,17 @@ type AmbiguousError (t :: Type) (dom1 :: Domain) (dom2 :: Domain) =
   :$$$: Outro
 
 type StuckErrorMsg (orig :: Type) (n :: Type) =
-        "Could not determine whether the following type contained a domain:"
+        "Could not determine whether the following type contained a non-ambiguous domain:"
   :$$$: ""
   :$$$: "  " :<<>>: n
   :$$$: ""
   :$$$: "In the full type:"
   :$$$: ""
   :$$$: "  " :<<>>: orig
+  :$$$: ""
+  :$$$: "Does it contain one?"
+  :$$$: ""
+  :$$$: "------"
   :$$$: ""
   :$$$: MissingInstance
   :$$$: Outro
