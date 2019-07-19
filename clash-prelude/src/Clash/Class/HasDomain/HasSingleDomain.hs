@@ -39,9 +39,9 @@ type MissingInstance =
         "This might happen if an instance for TryDomain is missing. Try to determine"
   :$$$: "which of the types miss an instance, and add them. Example implementations:"
   :$$$: ""
-  :$$$: " * type instance HasDomain t (MyVector n a)    = TryDomain t a"
-  :$$$: " * type instance HasDomain t (MyCircuit dom a) = Found dom"
-  :$$$: " * type instance HasDomain t Terminal          = NotFound"
+  :$$$: " * type instance TryDomain t (MyVector n a)    = TryDomain t a"
+  :$$$: " * type instance TryDomain t (MyCircuit dom a) = Found dom"
+  :$$$: " * type instance TryDomain t Terminal          = NotFound"
   :$$$: ""
   :$$$: "Alternatively, use one of the withSpecific* functions."
 
