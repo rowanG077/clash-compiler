@@ -927,7 +927,7 @@ foldr f z (x `Cons` xs) = f x (foldr f z xs)
 -- associative, as @"'fold' f xs"@ produces a structure with a depth of
 -- O(log_2(@'length' xs@)).
 foldl :: (b -> a -> b) -> b -> Vec n a -> b
-foldl f z xs = last (scanl f z xs)
+foldl f z xs = foldr (\b g x -> g (f x b)) id xs z
 {-# INLINE foldl #-}
 
 -- | 'foldr1' is a variant of 'foldr' that has no starting value argument,
